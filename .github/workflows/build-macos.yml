@@ -47,6 +47,12 @@ jobs:
           set -euo pipefail
           cp overlays/Program.cs StudentManagement.Desktop/Program.cs
 
+      - name: Apply enhanced Add/Edit Student form
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp overlays/StudentFormWindow.cs StudentManagement.Desktop/StudentFormWindow.cs
+
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
@@ -67,15 +73,15 @@ jobs:
           file "RELEASE_MACOS_ARM64/Student Management.app/Contents/MacOS/StudentManagement"
           codesign --verify --deep --strict "RELEASE_MACOS_ARM64/Student Management.app"
 
-      - name: Prepare V8 package
+      - name: Prepare V9 package
         shell: bash
         run: |
-          cp RELEASE_MACOS_ARM64/StudentManagement_macOS_AppleSilicon.zip RELEASE_MACOS_ARM64/StudentManagement_Mac_AppleSilicon_V8.zip
+          cp RELEASE_MACOS_ARM64/StudentManagement_macOS_AppleSilicon.zip RELEASE_MACOS_ARM64/StudentManagement_Mac_AppleSilicon_V9.zip
 
       - name: Upload finished Mac application
         uses: actions/upload-artifact@v4
         with:
-          name: StudentManagement-Mac-AppleSilicon-V8
-          path: RELEASE_MACOS_ARM64/StudentManagement_Mac_AppleSilicon_V8.zip
+          name: StudentManagement-Mac-AppleSilicon-V9
+          path: RELEASE_MACOS_ARM64/StudentManagement_Mac_AppleSilicon_V9.zip
           if-no-files-found: error
           retention-days: 30
