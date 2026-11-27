@@ -21,7 +21,7 @@ jobs:
           set -euo pipefail
           cat payload/part*.txt > source_payload.tar.gz.b64
           echo "4c0c2b7e397df4b3279b09a0f5ce81c77ce28a9f6d4e2f82da9c9d9721c981d3  source_payload.tar.gz.b64" | shasum -a 256 -c -
-          base64 --decode source_payload.tar.gz.b64 > source_payload.tar.gz
+          base64 -D -i source_payload.tar.gz.b64 -o source_payload.tar.gz
           echo "51ab34a5e6b07c1c7d39dd2d1a81de897781cdca1b253c0e7e37eeeb571c56b7  source_payload.tar.gz" | shasum -a 256 -c -
           tar -xzf source_payload.tar.gz
           cp -R sm_payload/. .
