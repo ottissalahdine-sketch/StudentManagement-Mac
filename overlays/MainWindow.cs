@@ -93,7 +93,9 @@ public sealed class DashboardWindow : Window
     private readonly StackPanel gradeChart=new(){Spacing=5};
     private readonly StackPanel roomChart=new(){Spacing=5};
     private readonly DataGrid summary=MainWindow.GridBase();
-    private readonly DonutChart genderPie=new();
+    private readonly DonutChart genderPie=new(){MinWidth=210,MinHeight=210,Width=220,Height=220,HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Center};
+    private readonly TextBlock maleLegend=new(){FontWeight=FontWeight.SemiBold};
+    private readonly TextBlock femaleLegend=new(){FontWeight=FontWeight.SemiBold};
     private readonly TextBlock status=new(){Foreground=MainWindow.Brush("#64748B")};
 
     public DashboardWindow()
@@ -106,6 +108,10 @@ public sealed class DashboardWindow : Window
         MainWindow.Add(summary,"Male","Male",100);
         MainWindow.Add(summary,"Female","Female",100);
         MainWindow.Add(summary,"Total","Total",100);
+        summary.RowHeight=25;
+        summary.ColumnHeaderHeight=30;
+        summary.HorizontalAlignment=HorizontalAlignment.Stretch;
+        summary.VerticalAlignment=VerticalAlignment.Stretch;
         Content=Build();
         Opened+=(_,_)=>WindowState=WindowState.Maximized;
         Load();
@@ -150,19 +156,18 @@ public sealed class DashboardWindow : Window
         {
             Margin=new Thickness(0,10,0,8),
             ColumnDefinitions=ColumnDefinitions.Parse("1.05*,1.35*"),
-            RowDefinitions=RowDefinitions.Parse("*,*")
+            RowDefinitions=RowDefinitions.Parse("0.44*,0.56*")
         };
 
-        var genderCard=ChartCard("GENDER DISTRIBUTION",
-            new Grid{ColumnDefinitions=ColumnDefinitions.Parse("220,*"),Children={
-                genderPie,
-                new StackPanel{Margin=new Thickness(16,10,0,0),Spacing=12,Children={
-                    Legend("#00796B","Male",genderPie.Male),
-                    Legend("#E91E63","Female",genderPie.Female),
-                    new TextBlock{Text="Interactive with dashboard filters",Foreground=MainWindow.Brush("#64748B"),FontSize=12,TextWrapping=TextWrapping.Wrap}
-                }}
-            }});
-        ((Grid)((Border)genderCard).Child!).Children[1].SetValue(Grid.ColumnProperty,1);
+        var genderPanel=new Grid{ColumnDefinitions=ColumnDefinitions.Parse("250,*")};
+        genderPanel.Children.Add(genderPie);
+        var legendPanel=new StackPanel{Margin=new Thickness(18,18,0,0),Spacing=14,VerticalAlignment=VerticalAlignment.Center};
+        legendPanel.Children.Add(Legend("#00796B",maleLegend));
+        legendPanel.Children.Add(Legend("#E91E63",femaleLegend));
+        legendPanel.Children.Add(new TextBlock{Text="Interactive with dashboard filters",Foreground=MainWindow.Brush("#64748B"),FontSize=12,TextWrapping=TextWrapping.Wrap});
+        legendPanel.SetValue(Grid.ColumnProperty,1);
+        genderPanel.Children.Add(legendPanel);
+        var genderCard=ChartCard("GENDER DISTRIBUTION",genderPanel);
         genderCard.Margin=new Thickness(0,0,8,8);
         body.Children.Add(genderCard);
 
@@ -186,15 +191,19 @@ public sealed class DashboardWindow : Window
         return root;
     }
 
-    private Border ChartCard(string title,Control body)=>MainWindow.Card(
-        new Grid{RowDefinitions=RowDefinitions.Parse("Auto,*"),Children={
-            new TextBlock{Text=title,FontWeight=FontWeight.Bold,FontSize=15,Foreground=MainWindow.Brush("#0E2554"),Margin=new Thickness(0,0,0,8)},
-            body
-        }},new Thickness(14),"#FFFFFF");
+    private Border ChartCard(string title,Control body)
+    {
+        var grid=new Grid{RowDefinitions=RowDefinitions.Parse("Auto,*")};
+        var titleBlock=new TextBlock{Text=title,FontWeight=FontWeight.Bold,FontSize=15,Foreground=MainWindow.Brush("#0E2554"),Margin=new Thickness(0,0,0,10)};
+        grid.Children.Add(titleBlock);
+        body.SetValue(Grid.RowProperty,1);
+        grid.Children.Add(body);
+        return MainWindow.Card(grid,new Thickness(12),"#FFFFFF");
+    }
 
-    private static StackPanel Legend(string color,string label,int value)=>new(){Orientation=Orientation.Horizontal,Spacing=8,Children={
+    private static StackPanel Legend(string color,TextBlock text)=>new(){Orientation=Orientation.Horizontal,Spacing=8,Children={
         new Border{Width=14,Height=14,CornerRadius=new CornerRadius(7),Background=MainWindow.Brush(color),VerticalAlignment=VerticalAlignment.Center},
-        new TextBlock{Text=$"{label}: {value:#,0}",FontWeight=FontWeight.SemiBold,VerticalAlignment=VerticalAlignment.Center}
+        text
     }};
 
     private void Load()
@@ -231,6 +240,8 @@ public sealed class DashboardWindow : Window
             kpis.Children.Add(Kpi(kv.Item1,kv.Item2));
 
         genderPie.Male=male; genderPie.Female=female; genderPie.InvalidateVisual();
+        maleLegend.Text=$"Male: {male:#,0}  ({(total>0?(100.0*male/total):0):0.0}%)";
+        femaleLegend.Text=$"Female: {female:#,0}  ({(total>0?(100.0*female/total):0):0.0}%)";
 
         var gc=rows.GroupBy(r=>S(r,"Grade")).Where(g=>g.Key.Length>0).OrderBy(g=>g.Key).Select(g=>(g.Key,g.Count())).ToArray();
         FillChart(gradeChart,gc,Math.Max(1,gc.Select(x=>x.Item2).DefaultIfEmpty(1).Max()));
