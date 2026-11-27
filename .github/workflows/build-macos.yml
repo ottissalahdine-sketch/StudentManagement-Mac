@@ -63,6 +63,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: StudentManagement-Mac-AppleSilicon-V3
-          path: RELEASE_MACOS_ARM64/StudentManagement_Mac_AppleSilicon_V2.zip
+          path: RELEASE_MACOS_ARM64/StudentManagement_Mac_AppleSilicon_V3.zip
           if-no-files-found: error
           retention-days: 30
