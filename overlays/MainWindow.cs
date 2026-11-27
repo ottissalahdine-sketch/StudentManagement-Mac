@@ -55,11 +55,7 @@ public sealed class MainWindow : Window
         }};
         titles.SetValue(Grid.ColumnProperty,1); brand.Children.Add(titles);
 
-        var dbChip=Card(new StackPanel{Spacing=1,Children={
-            new TextBlock{Text="DATABASE",FontSize=10,FontWeight=FontWeight.Bold,Foreground=Brush("#64748B")},
-            new TextBlock{Text=Path.GetFileName(ExcelRepository.WorkbookPath),FontSize=12,FontWeight=FontWeight.SemiBold,Foreground=Brush("#0E2554")}
-        }},new Thickness(14,8),"#FFFFFF");
-        dbChip.SetValue(Grid.ColumnProperty,2); brand.Children.Add(dbChip);
+
 
         _homeGrid.Children.Add(brand);
 
