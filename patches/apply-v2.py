@@ -193,3 +193,37 @@ s = s.replace(insert_marker, method + insert_marker, 1)
 admin.write_text(s, encoding="utf-8")
 
 print("Mac V2 migration patches applied successfully")
+
+
+# --- MainWindow: avoid Avalonia native folder picker crash on macOS ---
+main = root / "StudentManagement.Desktop" / "MainWindow.cs"
+s = main.read_text(encoding="utf-8")
+
+old_pick = '''    private async Task<string?> PickFolder(string title){var f=await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions{Title=title,AllowMultiple=false});return f.FirstOrDefault()?.TryGetLocalPath();}'''
+new_pick = '''    private async Task<string?> PickFolder(string title)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            var folder = title.Contains("database", StringComparison.OrdinalIgnoreCase)
+                ? Path.Combine(documents, "StudentsDatabase")
+                : documents;
+            Directory.CreateDirectory(folder);
+            return folder;
+        }
+
+        var f = await StorageProvider.OpenFolderPickerAsync(
+            new FolderPickerOpenOptions
+            {
+                Title = title,
+                AllowMultiple = false
+            });
+
+        return f.FirstOrDefault()?.TryGetLocalPath();
+    }'''
+if old_pick not in s:
+    raise SystemExit("MainWindow PickFolder method not found")
+s = s.replace(old_pick, new_pick, 1)
+main.write_text(s, encoding="utf-8")
+
+print("Mac V3 folder-picker safety patch applied successfully")
