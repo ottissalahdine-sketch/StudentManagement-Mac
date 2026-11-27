@@ -1,0 +1,56 @@
+name: Build Student Management macOS Apple Silicon
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'payload/**'
+      - '.github/workflows/build-macos.yml'
+
+jobs:
+  build-macos-arm64:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Reconstruct verified source payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat payload/part*.txt > source_payload.tar.gz.b64
+          echo "4c0c2b7e397df4b3279b09a0f5ce81c77ce28a9f6d4e2f82da9c9d9721c981d3  source_payload.tar.gz.b64" | shasum -a 256 -c -
+          base64 --decode source_payload.tar.gz.b64 > source_payload.tar.gz
+          echo "51ab34a5e6b07c1c7d39dd2d1a81de897781cdca1b253c0e7e37eeeb571c56b7  source_payload.tar.gz" | shasum -a 256 -c -
+          tar -xzf source_payload.tar.gz
+          cp -R sm_payload/. .
+          rm -rf sm_payload source_payload.tar.gz source_payload.tar.gz.b64
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build Apple Silicon app
+        shell: bash
+        run: |
+          chmod +x scripts/build-macos-arm64.sh
+          ./scripts/build-macos-arm64.sh
+
+      - name: Verify app bundle
+        shell: bash
+        run: |
+          test -d "RELEASE_MACOS_ARM64/Student Management.app"
+          test -f "RELEASE_MACOS_ARM64/StudentManagement_macOS_AppleSilicon.zip"
+          test -x "RELEASE_MACOS_ARM64/Student Management.app/Contents/MacOS/StudentManagement"
+          file "RELEASE_MACOS_ARM64/Student Management.app/Contents/MacOS/StudentManagement"
+          codesign --verify --deep --strict "RELEASE_MACOS_ARM64/Student Management.app"
+
+      - name: Upload finished Mac application
+        uses: actions/upload-artifact@v4
+        with:
+          name: StudentManagement-Mac-AppleSilicon
+          path: RELEASE_MACOS_ARM64/StudentManagement_macOS_AppleSilicon.zip
+          if-no-files-found: error
+          retention-days: 30
