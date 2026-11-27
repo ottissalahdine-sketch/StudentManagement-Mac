@@ -32,9 +32,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cp patches/AdminAuthManager.vb StudentManagement.Core/AdminAuthManager.vb
-          cp patches/AppSettingsManager.vb StudentManagement.Core/AppSettingsManager.vb
-          cp patches/ExcelRepository.vb StudentManagement.Core/ExcelRepository.vb
+          python3 patches/apply-v2.py
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
