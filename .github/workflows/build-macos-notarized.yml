@@ -1,0 +1,178 @@
+name: Build Notarized Student Management macOS Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  notarized-macos-arm64:
+    runs-on: macos-15-intel
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Reconstruct verified source payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat payload/part*.txt > source_payload.tar.gz.b64
+          echo "7025013c9ed3547f60b99974f0cc3fdf824ba536b0b7cb68a5eb2a48407eb752  source_payload.tar.gz.b64" | shasum -a 256 -c -
+          base64 -D -i source_payload.tar.gz.b64 -o source_payload.tar.gz
+          echo "1882973dad0f215cefe9aad28cc68a85adcc6e66a5144183f7e27e99a33e9dd1  source_payload.tar.gz" | shasum -a 256 -c -
+          tar -xzf source_payload.tar.gz
+          cp -R sm_payload/. .
+          rm -rf sm_payload source_payload.tar.gz source_payload.tar.gz.b64
+
+      - name: Apply macOS migration and UI patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 patches/apply-v2.py
+          cp overlays/MainWindow.cs StudentManagement.Desktop/MainWindow.cs
+          cp overlays/Program.cs StudentManagement.Desktop/Program.cs
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build Apple Silicon app
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x scripts/build-macos-arm64.sh
+          ./scripts/build-macos-arm64.sh
+
+      - name: Validate required Apple secrets
+        shell: bash
+        env:
+          CERT_B64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          for v in CERT_B64 CERT_PASSWORD APPLE_ID APPLE_PASSWORD TEAM_ID; do
+            if [ -z "${!v:-}" ]; then
+              echo "::error::Missing GitHub secret: $v"
+              exit 1
+            fi
+          done
+
+      - name: Import Developer ID certificate
+        shell: bash
+        env:
+          CERT_B64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN="$RUNNER_TEMP/studentmanagement-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          CERT_PATH="$RUNNER_TEMP/developer-id.p12"
+
+          printf '%s' "$CERT_B64" | base64 -D -o "$CERT_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$CERT_PATH" -P "$CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+
+          SIGN_IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -1)"
+          if [ -z "$SIGN_IDENTITY" ]; then
+            echo "::error::Developer ID Application identity was not found in the imported certificate."
+            exit 1
+          fi
+
+          echo "KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
+          echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> "$GITHUB_ENV"
+          echo "SIGN_IDENTITY=$SIGN_IDENTITY" >> "$GITHUB_ENV"
+          echo "Signing identity found."
+
+      - name: Developer ID sign with Hardened Runtime and secure timestamp
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="RELEASE_MACOS_ARM64/Student Management.app"
+
+          # Replace the development/ad-hoc signature. Sign nested Mach-O code first, then the app.
+          while IFS= read -r -d '' f; do
+            if file "$f" | grep -q "Mach-O"; then
+              codesign --force --timestamp --options runtime --sign "$SIGN_IDENTITY" --keychain "$KEYCHAIN" "$f"
+            fi
+          done < <(find "$APP/Contents" -type f -print0)
+
+          codesign --force --timestamp --options runtime --sign "$SIGN_IDENTITY" --keychain "$KEYCHAIN" "$APP"
+
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          codesign -dvvv "$APP" 2>&1 | grep -E 'Authority=Developer ID Application|TeamIdentifier|Timestamp|Runtime Version' || true
+
+      - name: Create notarization upload
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f "$RUNNER_TEMP/StudentManagement-notarization.zip"
+          ditto -c -k --sequesterRsrc --keepParent "RELEASE_MACOS_ARM64/Student Management.app" "$RUNNER_TEMP/StudentManagement-notarization.zip"
+
+      - name: Submit to Apple Notary Service
+        shell: bash
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          xcrun notarytool submit "$RUNNER_TEMP/StudentManagement-notarization.zip"             --apple-id "$APPLE_ID"             --password "$APPLE_PASSWORD"             --team-id "$TEAM_ID"             --wait             --output-format json | tee "$RUNNER_TEMP/notary-result.json"
+
+          STATUS="$(python3 - <<'PY'
+import json, os
+p=os.environ['RUNNER_TEMP'] + '/notary-result.json'
+with open(p,'r',encoding='utf-8') as f:
+    d=json.load(f)
+print(d.get('status',''))
+PY
+)"
+          if [ "$STATUS" != "Accepted" ]; then
+            echo "::error::Apple notarization was not accepted (status: $STATUS)."
+            exit 1
+          fi
+
+      - name: Staple notarization ticket
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="RELEASE_MACOS_ARM64/Student Management.app"
+          xcrun stapler staple "$APP"
+          xcrun stapler validate "$APP"
+
+      - name: Verify Gatekeeper acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="RELEASE_MACOS_ARM64/Student Management.app"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          spctl --assess --type execute --verbose=4 "$APP"
+
+      - name: Package notarized release
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f RELEASE_MACOS_ARM64/StudentManagement_Mac_AppleSilicon_NOTARIZED.zip
+          cd RELEASE_MACOS_ARM64
+          ditto -c -k --sequesterRsrc --keepParent "Student Management.app" "StudentManagement_Mac_AppleSilicon_NOTARIZED.zip"
+          shasum -a 256 "StudentManagement_Mac_AppleSilicon_NOTARIZED.zip"
+
+      - name: Upload notarized Mac application
+        uses: actions/upload-artifact@v4
+        with:
+          name: StudentManagement-Mac-AppleSilicon-NOTARIZED
+          path: RELEASE_MACOS_ARM64/StudentManagement_Mac_AppleSilicon_NOTARIZED.zip
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Clean signing keychain
+        if: always()
+        shell: bash
+        run: |
+          if [ -n "${KEYCHAIN:-}" ] && [ -f "$KEYCHAIN" ]; then
+            security delete-keychain "$KEYCHAIN" || true
+          fi
