@@ -41,6 +41,12 @@ jobs:
           set -euo pipefail
           cp overlays/MainWindow.cs StudentManagement.Desktop/MainWindow.cs
 
+      - name: Apply DataGrid theme bootstrap
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp overlays/Program.cs StudentManagement.Desktop/Program.cs
+
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
@@ -61,15 +67,15 @@ jobs:
           file "RELEASE_MACOS_ARM64/Student Management.app/Contents/MacOS/StudentManagement"
           codesign --verify --deep --strict "RELEASE_MACOS_ARM64/Student Management.app"
 
-      - name: Prepare V4 package
+      - name: Prepare V5 package
         shell: bash
         run: |
-          cp RELEASE_MACOS_ARM64/StudentManagement_macOS_AppleSilicon.zip RELEASE_MACOS_ARM64/StudentManagement_Mac_AppleSilicon_V4.zip
+          cp RELEASE_MACOS_ARM64/StudentManagement_macOS_AppleSilicon.zip RELEASE_MACOS_ARM64/StudentManagement_Mac_AppleSilicon_V5.zip
 
       - name: Upload finished Mac application
         uses: actions/upload-artifact@v4
         with:
-          name: StudentManagement-Mac-AppleSilicon-V4
-          path: RELEASE_MACOS_ARM64/StudentManagement_Mac_AppleSilicon_V4.zip
+          name: StudentManagement-Mac-AppleSilicon-V5
+          path: RELEASE_MACOS_ARM64/StudentManagement_Mac_AppleSilicon_V5.zip
           if-no-files-found: error
           retention-days: 30
