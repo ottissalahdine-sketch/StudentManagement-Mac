@@ -446,15 +446,267 @@ public sealed class DonutChart : Control
 
 public sealed class StudentsWindow : Window
 {
-    private readonly ObservableCollection<StudentRecord> shown=new(); private List<StudentRecord> all=new(); private readonly DataGrid grid=MainWindow.GridBase(); private readonly TextBox search=MainWindow.Field("Search student no, name, grade, room, iqama, phone...");
-    public StudentsWindow(){Title="Search Student";Width=1380;Height=820;MinWidth=980;MinHeight=620;WindowStartupLocation=WindowStartupLocation.CenterOwner;MainWindow.AddStudentColumns(grid);grid.ItemsSource=shown;Content=Build();Load();}
-    private Control Build(){search.PropertyChanged+=(_,e)=>{if(e.Property==TextBox.TextProperty)Apply();};var add=MainWindow.PrimaryButton("ADD STUDENT");add.Click+=async(_,_)=>{var w=new StudentFormWindow();await w.ShowDialog(this);if(w.Saved)Load();};var edit=MainWindow.LightButton("EDIT");edit.Click+=async(_,_)=>await Edit();var profile=MainWindow.LightButton("PROFILE");profile.Click+=async(_,_)=>await Profile();var del=MainWindow.LightButton("DELETE");del.Click+=async(_,_)=>await Delete();var xls=MainWindow.LightButton("EXPORT EXCEL");xls.Click+=async(_,_)=>await Export("xlsx");var pdf=MainWindow.LightButton("EXPORT PDF");pdf.Click+=async(_,_)=>await Export("pdf");var close=MainWindow.SecondaryButton("← BACK");close.Click+=(_,_)=>Close();var root=new Grid{Margin=new Thickness(22),RowDefinitions=RowDefinitions.Parse("Auto,Auto,*")};var head=new StackPanel{Spacing=10,Children={MainWindow.Header("SEARCH STUDENT"),search,MainWindow.Row(add,edit,profile,del,xls,pdf,close)}};root.Children.Add(head);var host=new Border{Margin=new Thickness(0,14,0,0),Child=grid};host.SetValue(Grid.RowProperty,2);root.Children.Add(host);return root;}
-    private void Load(){try{all=ExcelRepository.LoadStudents().Rows.Cast<DataRow>().Select(StudentRecord.From).ToList();Apply();}catch(Exception ex){_=Ui.Alert(this,"Database Error",ex.Message);}}
-    private void Apply(){var q=(search.Text??"").Trim();shown.Clear();foreach(var s in all.Where(s=>q.Length==0||$"{s.StudentNo} {s.Name} {s.Gender} {s.Iquama} {s.DateOfBirth} {s.Grade} {s.Room} {s.Phone1} {s.Phone2} {s.Phone3} {s.Phone4}".Contains(q,StringComparison.OrdinalIgnoreCase)))shown.Add(s);}
-    private async Task Edit(){if(grid.SelectedItem is not StudentRecord s){await Ui.Alert(this,"Edit","Select a student first.");return;}var w=new StudentFormWindow(s);await w.ShowDialog(this);if(w.Saved)Load();}
-    private async Task Profile(){if(grid.SelectedItem is not StudentRecord s){await Ui.Alert(this,"Profile","Select a student first.");return;}await new StudentProfileWindow(s).ShowDialog(this);Load();}
-    private async Task Delete(){if(grid.SelectedItem is not StudentRecord s){await Ui.Alert(this,"Delete","Select a student first.");return;}if(await Ui.Confirm(this,"Delete Student",$"Move {s.StudentNo} - {s.Name} to Deleted Students?")){try{ExcelRepository.DeleteStudent(s.StudentNo);Load();}catch(Exception ex){await Ui.Alert(this,"Delete Error",ex.Message);}}}
-    private async Task Export(string ext){try{var table=ExcelRepository.LoadStudents();var path=MainWindow.ExportPath("Student_Search",ext);if(ext=="xlsx")ReportExportService.ExportStudentsExcel(path,table,"Student Search",$"Records: {table.Rows.Count:#,0}");else ReportExportService.ExportStudentsPdf(path,table,"Student Search",$"Records: {table.Rows.Count:#,0}");await Ui.Alert(this,"Export Complete",path);}catch(Exception ex){await Ui.Alert(this,"Export Error",ex.Message);}}
+    private readonly ObservableCollection<StudentRecord> shown=new();
+    private List<StudentRecord> all=new();
+    private readonly DataGrid grid=MainWindow.GridBase();
+    private readonly TextBox search=MainWindow.Field("Search student no, name, grade, room, iqama, phone...");
+    private readonly Button genderFilter=MainWindow.LightButton("GENDER: ALL");
+    private readonly Button gradeFilter=MainWindow.LightButton("GRADE: ALL");
+    private readonly Button roomFilter=MainWindow.LightButton("ROOM: ALL");
+    private readonly TextBlock filterSummary=new(){Foreground=MainWindow.Brush("#64748B"),FontSize=11};
+
+    private readonly HashSet<string> selectedGenders=new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> selectedGrades=new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> selectedRooms=new(StringComparer.OrdinalIgnoreCase);
+
+    public StudentsWindow()
+    {
+        Title="Search Student";
+        Width=1420; Height=840; MinWidth=1040; MinHeight=640;
+        WindowStartupLocation=WindowStartupLocation.CenterOwner;
+        MainWindow.AddStudentColumns(grid);
+        grid.ItemsSource=shown;
+        Content=Build();
+        Load();
+    }
+
+    private Control Build()
+    {
+        search.PropertyChanged+=(_,e)=>{if(e.Property==TextBox.TextProperty)Apply();};
+
+        genderFilter.Click+=async(_,_)=>await ShowMultiSelect("Gender",selectedGenders,all.Select(s=>NormalizeGender(s.Gender)).Where(x=>x.Length>0).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x=>x).ToList(),genderFilter);
+        gradeFilter.Click+=async(_,_)=>await ShowMultiSelect("Grade",selectedGrades,all.Select(s=>s.Grade?.Trim()??"").Where(x=>x.Length>0).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x=>x).ToList(),gradeFilter);
+        roomFilter.Click+=async(_,_)=>await ShowMultiSelect("Room",selectedRooms,all.Select(s=>s.Room?.Trim()??"").Where(x=>x.Length>0).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x=>x).ToList(),roomFilter);
+
+        var clear=MainWindow.LightButton("CLEAR FILTERS");
+        clear.Click+=(_,_)=>{
+            selectedGenders.Clear(); selectedGrades.Clear(); selectedRooms.Clear();
+            UpdateFilterButtons(); Apply();
+        };
+
+        var add=MainWindow.PrimaryButton("ADD STUDENT");
+        add.Click+=async(_,_)=>{var w=new StudentFormWindow();await w.ShowDialog(this);if(w.Saved)Load();};
+
+        var edit=MainWindow.LightButton("EDIT");
+        edit.Click+=async(_,_)=>await Edit();
+
+        var profile=MainWindow.LightButton("PROFILE");
+        profile.Click+=async(_,_)=>await Profile();
+
+        var del=MainWindow.LightButton("DELETE");
+        del.Click+=async(_,_)=>await Delete();
+
+        var xls=MainWindow.LightButton("EXPORT EXCEL");
+        xls.Click+=async(_,_)=>await Export("xlsx");
+
+        var pdf=MainWindow.LightButton("EXPORT PDF");
+        pdf.Click+=async(_,_)=>await Export("pdf");
+
+        var back=MainWindow.SecondaryButton("← BACK");
+        back.Click+=(_,_)=>Close();
+
+        var root=new Grid{
+            Margin=new Thickness(22),
+            RowDefinitions=RowDefinitions.Parse("Auto,Auto,Auto,*")
+        };
+
+        var title=MainWindow.Header("SEARCH STUDENT");
+        root.Children.Add(title);
+
+        var searchRow=new Grid{ColumnDefinitions=ColumnDefinitions.Parse("*,Auto")};
+        search.Margin=new Thickness(0,10,10,0);
+        searchRow.Children.Add(search);
+        var actions=MainWindow.Row(add,edit,profile,del,xls,pdf,back);
+        actions.Margin=new Thickness(0,10,0,0);
+        actions.SetValue(Grid.ColumnProperty,1);
+        searchRow.Children.Add(actions);
+        searchRow.SetValue(Grid.RowProperty,1);
+        root.Children.Add(searchRow);
+
+        var filters=MainWindow.Card(
+            new StackPanel{Spacing=8,Children={
+                new TextBlock{Text="FILTERS",FontWeight=FontWeight.Bold,Foreground=MainWindow.Brush("#0E2554")},
+                MainWindow.Row(genderFilter,gradeFilter,roomFilter,clear),
+                filterSummary
+            }},
+            new Thickness(12),
+            "#FFFFFF"
+        );
+        filters.Margin=new Thickness(0,12,0,10);
+        filters.SetValue(Grid.RowProperty,2);
+        root.Children.Add(filters);
+
+        var host=MainWindow.Card(grid,new Thickness(0),"#FFFFFF");
+        host.SetValue(Grid.RowProperty,3);
+        root.Children.Add(host);
+
+        return root;
+    }
+
+    private void Load()
+    {
+        try
+        {
+            all=ExcelRepository.LoadStudents().Rows.Cast<DataRow>().Select(StudentRecord.From).ToList();
+            UpdateFilterButtons();
+            Apply();
+        }
+        catch(Exception ex)
+        {
+            _=Ui.Alert(this,"Database Error",ex.Message);
+        }
+    }
+
+    private void Apply()
+    {
+        var q=(search.Text??"").Trim();
+
+        var filtered=all.Where(s=>{
+            var text=$"{s.StudentNo} {s.Name} {s.Gender} {s.Iquama} {s.DateOfBirth} {s.Grade} {s.Room} {s.Phone1} {s.Phone2} {s.Phone3} {s.Phone4}";
+            if(q.Length>0 && !text.Contains(q,StringComparison.OrdinalIgnoreCase)) return false;
+
+            var g=NormalizeGender(s.Gender);
+            if(selectedGenders.Count>0 && !selectedGenders.Contains(g)) return false;
+
+            var gr=s.Grade?.Trim()??"";
+            if(selectedGrades.Count>0 && !selectedGrades.Contains(gr)) return false;
+
+            var rm=s.Room?.Trim()??"";
+            if(selectedRooms.Count>0 && !selectedRooms.Contains(rm)) return false;
+
+            return true;
+        }).ToList();
+
+        shown.Clear();
+        foreach(var s in filtered) shown.Add(s);
+
+        var parts=new List<string>();
+        if(selectedGenders.Count>0) parts.Add($"Gender: {string.Join(", ",selectedGenders)}");
+        if(selectedGrades.Count>0) parts.Add($"Grade: {string.Join(", ",selectedGrades)}");
+        if(selectedRooms.Count>0) parts.Add($"Room: {string.Join(", ",selectedRooms)}");
+        filterSummary.Text=(parts.Count==0?"No active filters":string.Join("  ·  ",parts))+$"  ·  {shown.Count:#,0} students";
+    }
+
+    private async Task ShowMultiSelect(string title,HashSet<string> selected,List<string> values,Button ownerButton)
+    {
+        var dialog=new Window{
+            Title=$"Select {title}",
+            Width=420,
+            Height=Math.Min(620,220+values.Count*34),
+            MinHeight=300,
+            WindowStartupLocation=WindowStartupLocation.CenterOwner,
+            Background=MainWindow.Brush("#EEF3F8")
+        };
+
+        var checks=new List<CheckBox>();
+        var list=new StackPanel{Spacing=4};
+
+        foreach(var value in values)
+        {
+            var cb=new CheckBox{
+                Content=value,
+                IsChecked=selected.Contains(value),
+                Margin=new Thickness(4,2)
+            };
+            checks.Add(cb);
+            list.Children.Add(cb);
+        }
+
+        var selectAll=MainWindow.LightButton("SELECT ALL");
+        selectAll.Click+=(_,_)=>{foreach(var cb in checks)cb.IsChecked=true;};
+
+        var clear=MainWindow.LightButton("CLEAR");
+        clear.Click+=(_,_)=>{foreach(var cb in checks)cb.IsChecked=false;};
+
+        var apply=MainWindow.PrimaryButton("APPLY");
+        apply.Click+=(_,_)=>{
+            selected.Clear();
+            foreach(var cb in checks)
+                if(cb.IsChecked==true && cb.Content is string s) selected.Add(s);
+            dialog.Close(true);
+        };
+
+        var cancel=MainWindow.SecondaryButton("CANCEL");
+        cancel.Click+=(_,_)=>dialog.Close(false);
+
+        var root=new Grid{
+            Margin=new Thickness(18),
+            RowDefinitions=RowDefinitions.Parse("Auto,*,Auto")
+        };
+        root.Children.Add(new StackPanel{Spacing=4,Children={
+            MainWindow.Header($"SELECT {title.ToUpperInvariant()}",20),
+            new TextBlock{Text="Choose one or more values",Foreground=MainWindow.Brush("#64748B")}
+        }});
+
+        var scroll=new ScrollViewer{Content=list,Margin=new Thickness(0,12,0,12)};
+        scroll.SetValue(Grid.RowProperty,1);
+        root.Children.Add(scroll);
+
+        var footer=MainWindow.Row(selectAll,clear,apply,cancel);
+        footer.SetValue(Grid.RowProperty,2);
+        root.Children.Add(footer);
+
+        dialog.Content=root;
+        var result=await dialog.ShowDialog<bool>(this);
+        if(result)
+        {
+            UpdateFilterButtons();
+            Apply();
+        }
+    }
+
+    private void UpdateFilterButtons()
+    {
+        genderFilter.Content=selectedGenders.Count==0?"GENDER: ALL":$"GENDER: {selectedGenders.Count} SELECTED";
+        gradeFilter.Content=selectedGrades.Count==0?"GRADE: ALL":$"GRADE: {selectedGrades.Count} SELECTED";
+        roomFilter.Content=selectedRooms.Count==0?"ROOM: ALL":$"ROOM: {selectedRooms.Count} SELECTED";
+    }
+
+    private static string NormalizeGender(string? g)
+    {
+        var v=(g??"").Trim();
+        if(v.Equals("M",StringComparison.OrdinalIgnoreCase)||v.Equals("Male",StringComparison.OrdinalIgnoreCase)||v.Equals("Boy",StringComparison.OrdinalIgnoreCase))return "Male";
+        if(v.Equals("F",StringComparison.OrdinalIgnoreCase)||v.Equals("Female",StringComparison.OrdinalIgnoreCase)||v.Equals("Girl",StringComparison.OrdinalIgnoreCase))return "Female";
+        return v;
+    }
+
+    private async Task Edit()
+    {
+        if(grid.SelectedItem is not StudentRecord s){await Ui.Alert(this,"Edit","Select a student first.");return;}
+        var w=new StudentFormWindow(s);
+        await w.ShowDialog(this);
+        if(w.Saved)Load();
+    }
+
+    private async Task Profile()
+    {
+        if(grid.SelectedItem is not StudentRecord s){await Ui.Alert(this,"Profile","Select a student first.");return;}
+        await new StudentProfileWindow(s).ShowDialog(this);
+        Load();
+    }
+
+    private async Task Delete()
+    {
+        if(grid.SelectedItem is not StudentRecord s){await Ui.Alert(this,"Delete","Select a student first.");return;}
+        if(await Ui.Confirm(this,"Delete Student",$"Move {s.StudentNo} - {s.Name} to Deleted Students?"))
+        {
+            try{ExcelRepository.DeleteStudent(s.StudentNo);Load();}
+            catch(Exception ex){await Ui.Alert(this,"Delete Error",ex.Message);}
+        }
+    }
+
+    private async Task Export(string ext)
+    {
+        try
+        {
+            var table=ExcelRepository.LoadStudents();
+            var path=MainWindow.ExportPath("Student_Search",ext);
+            if(ext=="xlsx")ReportExportService.ExportStudentsExcel(path,table,"Student Search",$"Records: {table.Rows.Count:#,0}");
+            else ReportExportService.ExportStudentsPdf(path,table,"Student Search",$"Records: {table.Rows.Count:#,0}");
+            await Ui.Alert(this,"Export Complete",path);
+        }
+        catch(Exception ex){await Ui.Alert(this,"Export Error",ex.Message);}
+    }
 }
 
 public sealed class StudentProfileWindow : Window
