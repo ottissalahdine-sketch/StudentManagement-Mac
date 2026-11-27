@@ -20,9 +20,9 @@ jobs:
         run: |
           set -euo pipefail
           cat payload/part*.txt > source_payload.tar.gz.b64
-          echo "d0d10f4e9ce135ee0d0e6da4c2f12c1adc3043e95c597a7369eef5d0c3bdab55  source_payload.tar.gz.b64" | shasum -a 256 -c -
+          echo "7025013c9ed3547f60b99974f0cc3fdf824ba536b0b7cb68a5eb2a48407eb752  source_payload.tar.gz.b64" | shasum -a 256 -c -
           base64 -D -i source_payload.tar.gz.b64 -o source_payload.tar.gz
-          echo "f9ccdd9739cf7f71ed8d8375f05e6ee4d2f2cec542a17796fa4c955df2091e63  source_payload.tar.gz" | shasum -a 256 -c -
+          echo "1882973dad0f215cefe9aad28cc68a85adcc6e66a5144183f7e27e99a33e9dd1  source_payload.tar.gz" | shasum -a 256 -c -
           tar -xzf source_payload.tar.gz
           cp -R sm_payload/. .
           rm -rf sm_payload source_payload.tar.gz source_payload.tar.gz.b64
