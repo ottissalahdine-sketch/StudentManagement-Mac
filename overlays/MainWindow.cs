@@ -15,38 +15,147 @@ namespace StudentManagement.Desktop;
 
 public sealed class MainWindow : Window
 {
-    private readonly StackPanel _menu = new(){Spacing=12,Width=560,HorizontalAlignment=HorizontalAlignment.Center};
+    private readonly Grid _homeGrid=new();
+    private readonly WrapPanel _actions=new(){HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Center};
 
     public MainWindow()
     {
         Title="Student Management";
-        Width=920; Height=780; MinWidth=760; MinHeight=650;
+        Width=1080; Height=760;
+        MinWidth=860; MinHeight=620;
         WindowStartupLocation=WindowStartupLocation.CenterScreen;
-        Background=Brush("#EEF2F7");
+        Background=Brush("#EEF3F8");
         Content=BuildHome();
+        Opened+=(_,_)=>ApplyHomeSizing();
+        SizeChanged+=(_,_)=>ApplyHomeSizing();
     }
 
     private Control BuildHome()
     {
-        var logo=new TextBlock{Text="STUDENT MANAGEMENT",FontSize=30,FontWeight=FontWeight.Bold,HorizontalAlignment=HorizontalAlignment.Center,Foreground=Brush("#0E2554")};
-        var school=new TextBlock{Text=AppSettingsManager.Current.SchoolName,FontSize=15,HorizontalAlignment=HorizontalAlignment.Center,Foreground=Brush("#475569")};
-        AddHome("ADD STUDENT", async()=>{var w=new StudentFormWindow();await w.ShowDialog(this);});
-        AddHome("SEARCH STUDENT", async()=>await new StudentsWindow().ShowDialog(this));
-        AddHome("DASHBOARD", async()=>await new DashboardWindow().ShowDialog(this));
-        AddHome("ACTIVITY LOG", async()=>await new ActivityLogWindow().ShowDialog(this));
-        AddHome("DATA QUALITY", async()=>await new DataQualityWindow().ShowDialog(this));
-        AddHome("IMPORT STUDENTS", async()=>await new ImportWizardWindow().ShowDialog(this));
-        AddHome("SETTINGS", async()=>await new SettingsWindow().ShowDialog(this));
-        AddHome("DELETED STUDENTS", async()=>await new DeletedStudentsWindow().ShowDialog(this));
-        AddHome("EXIT", async()=>{if(await Ui.Confirm(this,"Exit","Exit Student Management?")) Close();});
-        var card=Card(_menu,new Thickness(44),"#FFFFFF");
-        return new ScrollViewer{Content=new StackPanel{Margin=new Thickness(40,26),Spacing=16,Children={logo,school,card}}};
+        _homeGrid.RowDefinitions=RowDefinitions.Parse("Auto,*,Auto");
+        _homeGrid.Margin=new Thickness(28,22,28,20);
+
+        var brand=new Grid{ColumnDefinitions=ColumnDefinitions.Parse("Auto,*,Auto"),Margin=new Thickness(0,0,0,16)};
+
+        var mark=Card(
+            new TextBlock{
+                Text="SM",FontSize=24,FontWeight=FontWeight.Bold,
+                Foreground=Brush("#FFFFFF"),
+                HorizontalAlignment=HorizontalAlignment.Center,
+                VerticalAlignment=VerticalAlignment.Center
+            },
+            new Thickness(0),"#0E2554"
+        );
+        mark.Width=58; mark.Height=58; mark.CornerRadius=new CornerRadius(18);
+        brand.Children.Add(mark);
+
+        var titles=new StackPanel{Spacing=2,Margin=new Thickness(16,2,0,0),VerticalAlignment=VerticalAlignment.Center,Children={
+            new TextBlock{Text="STUDENT MANAGEMENT",FontSize=28,FontWeight=FontWeight.Bold,Foreground=Brush("#0F172A")},
+            new TextBlock{Text=AppSettingsManager.Current.SchoolName,FontSize=14,Foreground=Brush("#64748B")}
+        }};
+        titles.SetValue(Grid.ColumnProperty,1); brand.Children.Add(titles);
+
+        var dbChip=Card(new StackPanel{Spacing=1,Children={
+            new TextBlock{Text="DATABASE",FontSize=10,FontWeight=FontWeight.Bold,Foreground=Brush("#64748B")},
+            new TextBlock{Text=Path.GetFileName(ExcelRepository.WorkbookPath),FontSize=12,FontWeight=FontWeight.SemiBold,Foreground=Brush("#0E2554")}
+        }},new Thickness(14,8),"#FFFFFF");
+        dbChip.SetValue(Grid.ColumnProperty,2); brand.Children.Add(dbChip);
+
+        _homeGrid.Children.Add(brand);
+
+        var shell=Card(new Grid{
+            RowDefinitions=RowDefinitions.Parse("Auto,*"),
+            Children={
+                new StackPanel{Spacing=3,Margin=new Thickness(6,2,6,12),Children={
+                    new TextBlock{Text="CONTROL CENTER",FontSize=14,FontWeight=FontWeight.Bold,Foreground=Brush("#0E2554")},
+                    new TextBlock{Text="Choose a module to continue",FontSize=12,Foreground=Brush("#64748B")}
+                }},
+                _actions
+            }
+        },new Thickness(20),"#FFFFFF");
+        _actions.SetValue(Grid.RowProperty,1);
+        shell.SetValue(Grid.RowProperty,1);
+        _homeGrid.Children.Add(shell);
+
+        AddAction("ADD STUDENT","＋","Create a new student record",Brush("#00796B"),async()=>{var w=new StudentFormWindow();await w.ShowDialog(this);});
+        AddAction("SEARCH STUDENT","⌕","Find, review, edit and export",Brush("#0E2554"),async()=>await new StudentsWindow().ShowDialog(this));
+        AddAction("DASHBOARD","◫","Analytics, KPIs and summaries",Brush("#7C3AED"),async()=>await new DashboardWindow().ShowDialog(this));
+        AddAction("ACTIVITY LOG","≡","Audit trail and user activity",Brush("#1E54D2"),async()=>await new ActivityLogWindow().ShowDialog(this));
+        AddAction("DATA QUALITY","✓","Check missing and invalid data",Brush("#EA7E22"),async()=>await new DataQualityWindow().ShowDialog(this));
+        AddAction("IMPORT STUDENTS","⇩","Preview and import Excel records",Brush("#0284C7"),async()=>await new ImportWizardWindow().ShowDialog(this));
+        AddAction("SETTINGS","⚙","Database, backup and security",Brush("#475569"),async()=>await new SettingsWindow().ShowDialog(this));
+        AddAction("DELETED STUDENTS","↺","Restore deleted student records",Brush("#673AB7"),async()=>await new DeletedStudentsWindow().ShowDialog(this));
+
+        var footer=new Grid{ColumnDefinitions=ColumnDefinitions.Parse("*,Auto"),Margin=new Thickness(2,12,2,0)};
+        footer.Children.Add(new TextBlock{
+            Text="Student Management · Local Excel Database",
+            FontSize=11,Foreground=Brush("#94A3B8"),VerticalAlignment=VerticalAlignment.Center
+        });
+        var exit=LightButton("EXIT"); exit.MinWidth=92;
+        exit.Click+=async(_,_)=>{if(await Ui.Confirm(this,"Exit","Exit Student Management?"))Close();};
+        exit.SetValue(Grid.ColumnProperty,1); footer.Children.Add(exit);
+        footer.SetValue(Grid.RowProperty,2);
+        _homeGrid.Children.Add(footer);
+
+        return _homeGrid;
     }
 
-    private void AddHome(string text,Func<Task> action)
+    private void AddAction(string title,string icon,string subtitle,IBrush accent,Func<Task> action)
     {
-        var b=PrimaryButton(text); b.Height=58; b.HorizontalAlignment=HorizontalAlignment.Stretch; b.FontSize=14;
-        b.Click+=async(_,_)=>await action(); _menu.Children.Add(b);
+        var iconBox=new Border{
+            Width=48,Height=48,CornerRadius=new CornerRadius(14),
+            Background=accent,
+            Child=new TextBlock{
+                Text=icon,FontSize=23,FontWeight=FontWeight.Bold,
+                Foreground=Brush("#FFFFFF"),
+                HorizontalAlignment=HorizontalAlignment.Center,
+                VerticalAlignment=VerticalAlignment.Center
+            }
+        };
+
+        var text=new StackPanel{Spacing=3,Children={
+            new TextBlock{Text=title,FontSize=14,FontWeight=FontWeight.Bold,Foreground=Brush("#0F172A")},
+            new TextBlock{Text=subtitle,FontSize=11,Foreground=Brush("#64748B"),TextWrapping=TextWrapping.Wrap}
+        }};
+
+        var row=new Grid{ColumnDefinitions=ColumnDefinitions.Parse("Auto,*"),Children={iconBox,text}};
+        text.SetValue(Grid.ColumnProperty,1);
+        text.Margin=new Thickness(13,0,0,0);
+
+        var button=new Button{
+            Width=300,Height=104,
+            Margin=new Thickness(8),
+            Padding=new Thickness(16),
+            HorizontalContentAlignment=HorizontalAlignment.Stretch,
+            VerticalContentAlignment=VerticalAlignment.Center,
+            Background=Brush("#F8FAFC"),
+            BorderBrush=Brush("#D8E2EC"),
+            BorderThickness=new Thickness(1),
+            CornerRadius=new CornerRadius(16),
+            Content=row
+        };
+        button.Click+=async(_,_)=>await action();
+        _actions.Children.Add(button);
+    }
+
+    private void ApplyHomeSizing()
+    {
+        var usable=Math.Max(760,ClientSize.Width-56);
+        var columns=usable>=1120?3:usable>=760?2:1;
+        var cardWidth=columns==3?Math.Min(320,(usable-48)/3):Math.Min(340,(usable-32)/2);
+        foreach(var child in _actions.Children)
+            if(child is Button b)b.Width=cardWidth;
+
+        if(ClientSize.Height<690)
+        {
+            foreach(var child in _actions.Children)
+                if(child is Button b){b.Height=88;b.Margin=new Thickness(6);}
+        }
+        else
+        {
+            foreach(var child in _actions.Children)
+                if(child is Button b){b.Height=104;b.Margin=new Thickness(8);}
+        }
     }
 
     internal static SolidColorBrush Brush(string hex)=>new(Color.Parse(hex));
@@ -77,10 +186,6 @@ public sealed class MainWindow : Window
     {
         try{Process.Start(new ProcessStartInfo("open",$"\"{path}\""){UseShellExecute=false});}
         catch{await Ui.Alert(owner,"PDF Created",path);}
-    }
-    private void Logout()
-    {
-        var login=new LoginWindow(); if(Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime d)d.MainWindow=login; login.Show(); Close();
     }
 }
 
