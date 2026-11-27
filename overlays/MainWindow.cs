@@ -283,7 +283,7 @@ public sealed class DonutChart : Control
     {
         base.Render(context);
         var total=Male+Female;
-        var w=Math.Max(10,Bounds.Width), h=Math.Max(10,Bounds.Height);
+        double w=Math.Max(10,Bounds.Width); double h=Math.Max(10,Bounds.Height);
         var size=Math.Min(w,h)-20;
         var rect=new Rect((w-size)/2,(h-size)/2,size,size);
 
@@ -311,7 +311,7 @@ public sealed class DonutChart : Control
             context.DrawEllipse(brush,null,rect.Center,rect.Width/2,rect.Height/2);
             return;
         }
-        double r=rect.Width/2, cx=rect.Center.X, cy=rect.Center.Y;
+        double r=rect.Width/2; double cx=rect.Center.X; double cy=rect.Center.Y;
         double a1=startDeg*Math.PI/180.0, a2=(startDeg+sweepDeg)*Math.PI/180.0;
         var p1=new Point(cx+r*Math.Cos(a1),cy+r*Math.Sin(a1));
         var p2=new Point(cx+r*Math.Cos(a2),cy+r*Math.Sin(a2));
