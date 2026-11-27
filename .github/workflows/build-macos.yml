@@ -6,6 +6,7 @@ on:
     branches: [ main ]
     paths:
       - 'payload/**'
+      - 'patches/**'
       - '.github/workflows/build-macos.yml'
 
 jobs:
@@ -27,6 +28,14 @@ jobs:
           cp -R sm_payload/. .
           rm -rf sm_payload source_payload.tar.gz source_payload.tar.gz.b64
 
+      - name: Apply Mac V2 migration patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp patches/AdminAuthManager.vb StudentManagement.Core/AdminAuthManager.vb
+          cp patches/AppSettingsManager.vb StudentManagement.Core/AppSettingsManager.vb
+          cp patches/ExcelRepository.vb StudentManagement.Core/ExcelRepository.vb
+
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
@@ -47,10 +56,15 @@ jobs:
           file "RELEASE_MACOS_ARM64/Student Management.app/Contents/MacOS/StudentManagement"
           codesign --verify --deep --strict "RELEASE_MACOS_ARM64/Student Management.app"
 
+      - name: Prepare V2 package
+        shell: bash
+        run: |
+          cp RELEASE_MACOS_ARM64/StudentManagement_macOS_AppleSilicon.zip RELEASE_MACOS_ARM64/StudentManagement_Mac_AppleSilicon_V2.zip
+
       - name: Upload finished Mac application
         uses: actions/upload-artifact@v4
         with:
-          name: StudentManagement-Mac-AppleSilicon
-          path: RELEASE_MACOS_ARM64/StudentManagement_macOS_AppleSilicon.zip
+          name: StudentManagement-Mac-AppleSilicon-V2
+          path: RELEASE_MACOS_ARM64/StudentManagement_Mac_AppleSilicon_V2.zip
           if-no-files-found: error
           retention-days: 30
