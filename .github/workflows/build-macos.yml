@@ -67,15 +67,15 @@ jobs:
           file "RELEASE_MACOS_ARM64/Student Management.app/Contents/MacOS/StudentManagement"
           codesign --verify --deep --strict "RELEASE_MACOS_ARM64/Student Management.app"
 
-      - name: Prepare V5 package
+      - name: Prepare V6 package
         shell: bash
         run: |
-          cp RELEASE_MACOS_ARM64/StudentManagement_macOS_AppleSilicon.zip RELEASE_MACOS_ARM64/StudentManagement_Mac_AppleSilicon_V5.zip
+          cp RELEASE_MACOS_ARM64/StudentManagement_macOS_AppleSilicon.zip RELEASE_MACOS_ARM64/StudentManagement_Mac_AppleSilicon_V6.zip
 
       - name: Upload finished Mac application
         uses: actions/upload-artifact@v4
         with:
-          name: StudentManagement-Mac-AppleSilicon-V5
-          path: RELEASE_MACOS_ARM64/StudentManagement_Mac_AppleSilicon_V5.zip
+          name: StudentManagement-Mac-AppleSilicon-V6
+          path: RELEASE_MACOS_ARM64/StudentManagement_Mac_AppleSilicon_V6.zip
           if-no-files-found: error
           retention-days: 30
