@@ -140,7 +140,11 @@ public sealed class DashboardWindow : Window
     private static bool IsMale(DataRow r){var v=S(r,"Gender");return v.Equals("M",StringComparison.OrdinalIgnoreCase)||v.Equals("Male",StringComparison.OrdinalIgnoreCase);}
     private static bool IsFemale(DataRow r){var v=S(r,"Gender");return v.Equals("F",StringComparison.OrdinalIgnoreCase)||v.Equals("Female",StringComparison.OrdinalIgnoreCase);}
     private static string S(DataRow r,string c)=>r.Table.Columns.Contains(c)?Convert.ToString(r[c])?.Trim()??"":"";
-    private Border Kpi(string l,string v)=>MainWindow.Card(new StackPanel{Spacing=4,Children={new TextBlock{Text=l,Foreground=MainWindow.Brush("#64748B")},new TextBlock{Text=v,FontSize=28,FontWeight=FontWeight.Bold}}},new Thickness(16),"#FFFFFF") with {Width=225,Margin=new Thickness(0,0,10,0)};
+    private Border Kpi(string l,string v)
+    {
+        var card=MainWindow.Card(new StackPanel{Spacing=4,Children={new TextBlock{Text=l,Foreground=MainWindow.Brush("#64748B")},new TextBlock{Text=v,FontSize=28,FontWeight=FontWeight.Bold}}},new Thickness(16),"#FFFFFF");
+        card.Width=225; card.Margin=new Thickness(0,0,10,0); return card;
+    }
     private void FillChart(StackPanel p,IEnumerable<(string,int)> data,int max){p.Children.Clear();foreach(var (label,value) in data.Take(16)){var bar=new ProgressBar{Minimum=0,Maximum=max,Value=value,Height=12};p.Children.Add(new Grid{ColumnDefinitions=ColumnDefinitions.Parse("90,*,45"),Children={new TextBlock{Text=label,TextTrimming=TextTrimming.CharacterEllipsis},bar,new TextBlock{Text=value.ToString(),HorizontalAlignment=HorizontalAlignment.Right}}});bar.SetValue(Grid.ColumnProperty,1);((Grid)p.Children[^1]).Children[^1].SetValue(Grid.ColumnProperty,2);}}
     private sealed class GradeSummary{public string Grade{get;set;}="";public int Male{get;set;}public int Female{get;set;}public int Total{get;set;}}
 }
